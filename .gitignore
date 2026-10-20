@@ -225,3 +225,7 @@ __marimo__/
 /train.csv
 /validation.csv
 
+# AWARE: dati e risultati locali
+data/
+experiments/oof/
+experiments/sub/
