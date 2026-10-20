@@ -11,7 +11,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from src.config import DATA_DIR, OOF_DIR, ROOT_DIR
+from src.config import DATA_DIR, OOF_DIR, ROOT_DIR, SUB_DIR
 from src.cv import MODELS
 from src.data import load, load_trainval
 from src.ensemble import load_oofs, normalize
@@ -76,10 +76,19 @@ if __name__ == "__main__":
     for n, w in zip(names, weights):
         if w == 0:
             continue
-        meta = json.load(open(OOF_DIR / f"{n}.json"))
-        print(f"fit {n}: {meta}", flush=True)
-        test["_s"] = fit_predict(meta, trainval, test)
-        blend += w * normalize(test, "_s").to_numpy()
+        cache = SUB_DIR / f"test_pred_{n}.parquet"
+        if cache.exists():
+            # modello già addestrato su train+validation: riuso le predizioni (max 2 addestramenti per modello)
+            pred = test[["sample_id", "row_index"]].merge(pd.read_parquet(cache), on=["sample_id", "row_index"])
+            print(f"cache {n}: {cache.name}", flush=True)
+            z = pred["z"].to_numpy()
+        else:
+            meta = json.load(open(OOF_DIR / f"{n}.json"))
+            print(f"fit {n}: {meta}", flush=True)
+            test["_s"] = fit_predict(meta, trainval, test)
+            z = normalize(test, "_s").to_numpy()
+            test[["sample_id", "row_index"]].assign(z=z).to_parquet(cache, index=False)
+        blend += w * z
     test["score"] = blend
     sub = to_submission(test, "score")
     check_submission(sub, test)

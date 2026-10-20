@@ -9,9 +9,11 @@ from src.models.lgbm_rank import group_sizes
 
 PARAMS = {
     "loss_function": "QuerySoftMax",
-    "iterations": 800,
-    "learning_rate": 0.08,
+    # leggero per CPU: con 800 iterazioni la CV a 5 fold richiederebbe >2 h su 8 core
+    "iterations": 300,
+    "learning_rate": 0.15,
     "depth": 6,
+    "border_count": 64,
     "l2_leaf_reg": 3.0,
     "thread_count": N_THREADS,
     "random_seed": RANDOM_SEED,
@@ -51,4 +53,6 @@ class CatRank:
         return self.model.predict(X)
 
     def importance(self, feats) -> pd.Series:
-        return pd.Series(self.model.get_feature_importance(), index=feats).sort_values(ascending=False)
+        # il default per i ranker (LossFunctionChange) richiede il dataset di training
+        imp = self.model.get_feature_importance(type="PredictionValuesChange")
+        return pd.Series(imp, index=feats).sort_values(ascending=False)
