@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+/sample_submission.csv
+/test.csv
+/train.csv
+/validation.csv
+
