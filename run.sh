@@ -11,8 +11,8 @@ if [ ! -d .venv ]; then $PY -m venv .venv; fi
 VPY=.venv/bin/python; [ -x "$VPY" ] || VPY=.venv/Scripts/python.exe   # Windows
 $VPY -m pip install -q -r requirements.txt
 
-for f in train validation test; do
-  [ -f "data/$f.csv" ] || { echo "manca data/$f.csv: copia i CSV della competizione in data/"; exit 1; }
+for f in train validation test sample_submission; do
+  [ -f "data/$f.csv" ] || { echo "manca data/$f.csv: copia i 4 CSV della competizione in data/"; exit 1; }
 done
 [ -f data/train.parquet ] || $VPY -m src.data --convert
 $VPY -m pytest -q tests

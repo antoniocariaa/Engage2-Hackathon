@@ -250,10 +250,12 @@ COMPITO:
 2. copia i 4 CSV in data/
 3. rileva l'hardware: numero di core (nproc / os.cpu_count) e se c'è una GPU NVIDIA funzionante (nvidia-smi)
 4. esegui: AWARE_THREADS=<core> ./run.sh <modello> <feature_set> <exp_id>
-   (es. ./run.sh cat_rank ac m4-cat-ac). Se c'è una GPU NVIDIA e il modello è cat_rank, prova prima con AWARE_GPU=1;
+   (es. ./run.sh cat_rank ac m4-cat-ac-pc2). Se c'è una GPU NVIDIA e il modello è cat_rank, prova prima con AWARE_GPU=1;
    se CatBoost dà errore sulla GPU (loss non supportata, driver), rilancia senza AWARE_GPU.
    Su Windows senza bash: usa WSL o Git Bash; in alternativa esegui a mano i comandi di run.sh con .venv\Scripts\python.
 VINCOLI: non modificare il codice né i parametri; non fare commit o push; se i test falliscono fermati e riporta l'errore.
+Usa un exp_id con il nome del PC (es. m4-cat-ac-pc2) per non sovrascrivere i file del PC di sviluppo.
+PREREQUISITO (sul PC di sviluppo): il branch deve essere committato e pushato, altrimenti l'altro PC scarica codice vecchio.
 OUTPUT ATTESO: hardware usato, tempo totale, riga "CV hit3 = ..." e score per ATCO; poi copia sul PC di sviluppo
 experiments/oof/<exp_id>.parquet, experiments/oof/<exp_id>.json e l'ultima riga di experiments/EXPERIMENTS.md.
 ```
