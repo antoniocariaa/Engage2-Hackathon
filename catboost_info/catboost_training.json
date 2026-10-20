@@ -783,5 +783,6 @@
 {"learn":[1.22270273],"iteration":779,"passed_time":1112.844146,"remaining_time":28.53446527},
 {"learn":[1.221916745],"iteration":780,"passed_time":1114.156116,"remaining_time":27.10495032},
 {"learn":[1.220812564],"iteration":781,"passed_time":1115.532826,"remaining_time":25.67722619},
-{"learn":[1.220104362],"iteration":782,"passed_time":1117.157788,"remaining_time":24.25502222}
+{"learn":[1.220104362],"iteration":782,"passed_time":1117.157788,"remaining_time":24.25502222},
+{"learn":[1.219341734],"iteration":783,"passed_time":1118.613727,"remaining_time":22.82885157}
 ]}
