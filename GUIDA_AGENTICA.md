@@ -29,75 +29,215 @@ Regola di tempo: se una milestone supera di 2× la stima, fermarsi e chiedere se
 | Analisi degli errori su snapshot sbagliati | Decisioni di modello senza numeri di CV |
 | Riassumere esperimenti in EXPERIMENTS.md | Modificare `scorer.py` o i CSV |
 
-## 4. Prompt pronti (copia/incolla)
+## 4. Prompt pronti, con livello di complessità e modello consigliato
 
-Sostituire `<…>`. Ogni prompt assume che `CLAUDE.md` sia già letto dall'agente.
+Ogni prompt assume che `CLAUDE.md` sia già letto dall'agente. Sostituire i segnaposto `<…>`.
+Struttura fissa dei prompt: **Contesto → Compito → Vincoli → Output atteso → Gate**. Il blocco "Output atteso" evita rapporti vaghi e rende facile il controllo.
 
-### P0 — Avvio sessione
-```
-Leggi CLAUDE.md, PIANO_TECNICO.md e experiments/EXPERIMENTS.md.
-Dimmi in 5 righe: a che milestone siamo, qual è l'ultimo CV score registrato, e qual è il prossimo gate.
-Non scrivere codice finché non confermo.
-```
+### 4.1 Livelli di complessità
 
-### P1 — Milestone M0/M1 (setup, metrica, baseline)
-```
-Esegui M0 e M1 di PIANO_TECNICO.md.
-Crea .venv, installa le dipendenze CPU, converti i CSV in data/*.parquet (gitignored).
-Implementa src/metric.py e un test che confronta top3_hit_rate con scorer.py su validation.csv
-(usa una submission generata dalla baseline |time_to_sector| crescente).
-Mostrami i due numeri affiancati. Gate: coincidono esattamente, baseline ≈ 0.35.
-```
+| Tag | Cosa significa | Modello consigliato | Quando |
+|---|---|---|---|
+| 🟢 **EASY** | Meccanico, un solo file/comando, esito verificabile a colpo d'occhio, nessuna decisione di design | Haiku 5.5 (`claude-haiku-5-5`) | Setup, log, formattazione, controlli di formato |
+| 🟡 **MEDIUM** | Codice nuovo ma ben specificato, poche decisioni, test chiaro | Sonnet 5.5 (`claude-sonnet-5-5`) | Metrica, harness CV, wrapper di modelli, submission |
+| 🟠 **HARD** | Richiede ragionamento di dominio o design con trade-off; errori sottili possibili ma rilevabili con la CV | Opus 5.5 (`claude-opus-5-5`) | Feature engineering, ensemble, pesi per episodio |
+| 🔴 **VERY HARD** | Ragionamento multi-step su dati e codice insieme, ipotesi da falsificare, rischio di errori silenziosi (leakage, bug nei gruppi) | Fable 5.1 (`claude-fable-5-1`) | Analisi degli errori, audit di leakage, DeepSets |
 
-### P2 — M2 (harness CV)
-```
-Esegui M2. Implementa src/cv.py: GroupKFold(5) per atco su train+validation (concatenati),
-modello LightGBM lambdarank sulle sole feature grezze + task_index categorico.
-Requisiti: righe ordinate per sample_id, group = conteggi per sample_id, test unit che verifica
-l'allineamento dei gruppi e che nessun atco compare in train e valid dello stesso fold.
-Salva OOF in experiments/oof/. Stampa score per fold e per ATCO. Aggiorna EXPERIMENTS.md.
-```
+Regole d'uso:
+- **Escalation**: se un prompt fallisce il gate due volte con il modello consigliato, risali di un livello (Haiku → Sonnet → Opus → Fable). Non insistere con lo stesso modello.
+- **Discesa**: se un prompt HARD si riduce a un passo meccanico (es. "aggiungi queste 5 colonne già decise"), eseguilo con Sonnet.
+- Cambiare modello in Claude Code: `/model` prima di incollare il prompt.
+- Indicativamente il grosso del tempo-modello va su 🟠 (M3). Risparmia sui 🟢/🟡 per avere margine di quota nelle ultime ore.
 
-### P3 — M3 (feature engineering) — ripetibile per ogni famiglia di feature
-```
-Esegui il punto <N> di M3 (<nome famiglia: es. "aircraft ricostruito dal task_name">).
-Aggiungi le feature a src/features.py come nuova versione del feature set (<vX> = <vX-1> + nuove).
-Vincoli: funzioni pure, nessun uso di target_index, NaN preservati, float32.
-Poi lancia la CV con <vX> e confronta con <vX-1>: media±std e numero di ATCO migliorati/peggiorati.
-Mostra le 15 feature più importanti. Se non migliora, dimmelo e non committare.
-```
+### 4.2 Indice rapido
 
-### P4 — Brainstorming di feature (uso LLM come co-pilota di dominio)
-```
-Leggi la sezione 4 di "Analisi Tecnica Sfida SESAR AWARE.md" (le 87 feature) e le colonne di data/train.parquet.
-Proponi 10 feature di dominio ATC non ancora in features.py, ciascuna con: formula, colonne usate,
-perché dovrebbe discriminare il task scelto dal controllore, rischio di leakage.
-Ordinale per rapporto (atteso guadagno / costo). Non implementare nulla ancora.
-```
+| Prompt | Milestone | Livello | Modello |
+|---|---|---|---|
+| P0 Avvio sessione | — | 🟢 EASY | Haiku 5.5 |
+| P1 Setup ambiente e parquet | M0 | 🟢 EASY | Haiku 5.5 |
+| P2 Metrica e baseline | M1 | 🟡 MEDIUM | Sonnet 5.5 |
+| P3 Harness CV | M2 | 🟡 MEDIUM | Sonnet 5.5 |
+| P4 Famiglia di feature | M3 | 🟠 HARD | Opus 5.5 |
+| P5 Brainstorming di feature di dominio | M3 | 🟠 HARD | Opus 5.5 |
+| P6 Analisi degli errori | M3–M6 | 🔴 VERY HARD | Fable 5.1 |
+| P7 Nuovo modello di ranking | M4 | 🟡 MEDIUM | Sonnet 5.5 |
+| P8 Pesi per episodio | M5 | 🟠 HARD | Opus 5.5 |
+| P9 Ensemble e post-processing | M6 | 🟠 HARD | Opus 5.5 |
+| P10 DeepSets CPU | M7 | 🔴 VERY HARD | Fable 5.1 |
+| P11 Submission e validazione formato | M8 | 🟡 MEDIUM | Sonnet 5.5 |
+| P12 Audit leakage / CV anomala | qualsiasi | 🔴 VERY HARD | Fable 5.1 |
+| P13 Aggiornamento log esperimenti | qualsiasi | 🟢 EASY | Haiku 5.5 |
 
-### P5 — Analisi degli errori
+---
+
+### P0 — Avvio sessione · 🟢 EASY · Haiku 5.5
 ```
-Usando gli OOF di <exp_id>, estrai 20 snapshot in cui il target NON è nel top-3 (distribuiti su ATCO diversi).
-Per ciascuno mostra: tipo del target, sua posizione nel ranking, i 3 task predetti, e le feature principali che differiscono.
-Raggruppa in pattern ricorrenti (es. "target = transfer_aircraft preceduto da exit_coordination dello stesso aereo")
-e proponi per ogni pattern una feature o un post-processing. Non modificare codice.
+CONTESTO: nuova sessione sul progetto AWARE.
+COMPITO: leggi CLAUDE.md, PIANO_TECNICO.md e le ultime 10 righe di experiments/EXPERIMENTS.md (se esiste).
+VINCOLI: non scrivere né eseguire codice.
+OUTPUT ATTESO (max 5 righe): milestone corrente, ultimo CV score registrato (media±std), prossimo gate,
+eventuali esperimenti lasciati a metà, branch git attuale.
 ```
 
-### P6 — M4 (modelli), M6 (ensemble)
+### P1 — Setup ambiente e parquet (M0) · 🟢 EASY · Haiku 5.5
 ```
-Esegui M4: aggiungi src/models/cat_rank.py (CatBoost QuerySoftMax, task_index categorico, group_id=sample_id)
-con la stessa interfaccia di lgbm_rank.py. Stessi fold, salva OOF. Confronta con LightGBM.
-Poi M6: src/ensemble.py normalizza gli score con softmax intra-snapshot, cerca i pesi sugli OOF
-(griglia semplice, non ottimizzatori complessi) e riporta CV dell'ensemble vs miglior singolo.
+CONTESTO: M0 di PIANO_TECNICO.md. Solo CPU, ~7 GB di RAM libera, Python 3.12, nessuna libreria ML installata.
+COMPITO: crea .venv; scrivi requirements.txt con versioni fissate (pandas, pyarrow, numpy, scikit-learn, lightgbm,
+xgboost, catboost, scipy, pytest) e installa; converti train/validation/test.csv in data/*.parquet
+(float32 dove possibile, task_name come stringa); aggiungi data/, .venv/, experiments/oof/, experiments/sub/ a .gitignore.
+VINCOLI: non modificare i CSV originali; non committare dati.
+OUTPUT ATTESO: versioni installate, tempo di lettura di ogni parquet, dimensioni su disco, shape di ogni file.
+GATE: `import lightgbm, catboost, xgboost` ok; ogni parquet si carica in < 5 s.
 ```
 
-### P7 — M8 (submission)
+### P2 — Metrica e baseline (M1) · 🟡 MEDIUM · Sonnet 5.5
 ```
-Esegui M8. Riaddestra <modelli> su train+validation con le iterazioni medie trovate in CV,
-predici test.csv, scrivi experiments/sub/<nome>.csv con make_submission.py.
-Il check deve verificare: 1863 sample_id unici e completi, 3 row_index distinti per riga, tutti presenti nello snapshot.
-Stampa anche lo score di scorer.py --labelled validation.csv su una versione ottenuta con il modello addestrato SOLO su train
-(solo come sanity). Dimmi cosa caricare e quante submission restano oggi.
+CONTESTO: M1. La metrica ufficiale è in scorer.py (top-3 hit rate; duplicati rimossi; solo i primi 3 id distinti).
+COMPITO: implementa src/metric.py con top3_hit_rate(df, score_col) e top3_by_group(df, score_col, group_col)
+(per-ATCO). Genera la baseline "ordina per abs(time_to_sector) crescente" su validation.csv, scrivi il CSV di submission
+in formato sample_id,prediction, e confronta con `python scorer.py --labelled validation.csv <file>`.
+VINCOLI: nessuna modifica a scorer.py; gestire pareggi in modo deterministico (ordina anche per row_index).
+OUTPUT ATTESO: i due numeri (metrica locale vs scorer.py) affiancati + test pytest che li confronta.
+GATE: coincidono esattamente; baseline ≈ 0.35 (se molto diversa, segnala e indaga prima di proseguire).
+```
+
+### P3 — Harness CV (M2) · 🟡 MEDIUM · Sonnet 5.5
+```
+CONTESTO: M2. Dati = train+validation concatenati; gruppi di CV = atco; modello base = LightGBM lambdarank.
+COMPITO: src/cv.py con GroupKFold(5) per atco; src/models/lgbm_rank.py (feature grezze + task_index categorico,
+eval_at=[1,3], seed fisso); salva OOF in experiments/oof/<exp_id>.parquet (sample_id,row_index,score,fold,atco).
+VINCOLI: righe ordinate per sample_id contiguo prima di calcolare group = conteggi per sample_id.
+Escludi dalle feature: sample_id, seq_len, row_index, target_index, session, atco, scenario, timestamp, task_name.
+Scrivi test pytest per: (a) allineamento gruppi/righe, (b) nessun atco in train e valid dello stesso fold,
+(c) nessuna colonna vietata tra le feature.
+OUTPUT ATTESO: tabella score per fold e per ATCO, media±std, tempo di esecuzione, riga in EXPERIMENTS.md.
+GATE: CV ≥ baseline + 0.10; tutti i test passano.
+```
+
+### P4 — Famiglia di feature (M3) · 🟠 HARD · Opus 5.5
+```
+CONTESTO: M3. Feature set corrente = <vN-1> con CV <media±std>. Famiglia da aggiungere: <una tra:
+(1) scomposizione time_to_sector; (2) contesto di snapshot (rank, pct_rank, z-score, diff dal min/max);
+(3) carico dello snapshot; (4) aircraft ricostruito dal task_name e feature intra-aereo; (5) storia ATCO a_*>.
+COMPITO: implementa SOLO questa famiglia in src/features.py come feature set <vN> = <vN-1> + nuove.
+Per (4): estrai il callsign dal suffisso di task_name (conflict_resolution_* ha due callsign: crea una colonna per ciascuno
+o una chiave canonica), poi groupby(sample_id, callsign): conteggio task, flag di co-occorrenza
+(assume+entry, transfer+exit, zone_conflict), differenza/rapporto di x_task_age e x_state_age rispetto ai fratelli, rank intra-aereo.
+VINCOLI: funzioni pure; mai usare target_index; NaN preservati (nessuna imputazione); float32; nessun cambio di
+iperparametri nello stesso esperimento. Aggiungi un test: azzerando target_index le feature non cambiano.
+OUTPUT ATTESO: CV <vN> vs <vN-1> (media±std), n. ATCO migliorati/peggiorati, top-15 importanze, 3 snapshot d'esempio
+con le nuove feature, nota sul tempo di calcolo delle feature.
+GATE: se non migliora la CV media E in almeno ~60% degli ATCO, non committare: annota il fallimento in EXPERIMENTS.md.
+```
+
+### P5 — Brainstorming di feature di dominio (M3) · 🟠 HARD · Opus 5.5
+```
+CONTESTO: abbiamo il dizionario delle 87 feature nella sezione 4 di "Analisi Tecnica Sfida SESAR AWARE.md" e il
+feature set <vN> in src/features.py. Ruolo: controllore ATC en-route che sceglie quale task trattare adesso.
+COMPITO: proponi 10 feature di dominio NON ancora presenti. Per ognuna: nome, formula, colonne usate,
+ipotesi comportamentale (perché il controllore sceglierebbe questo task), rischio di leakage, costo di calcolo.
+Ordina per rapporto (guadagno atteso / costo). Controlla sui dati (statistiche descrittive su train) che le colonne
+usate abbiano abbastanza varianza e non siano costanti.
+VINCOLI: nessuna implementazione, nessuna modifica ai file. Niente feature che usano target_index o informazioni del futuro
+(timestamp successivi allo snapshot).
+OUTPUT ATTESO: tabella di 10 righe + le 3 che implementeresti per prime e perché.
+```
+
+### P6 — Analisi degli errori (M3–M6) · 🔴 VERY HARD · Fable 5.1
+```
+CONTESTO: OOF dell'esperimento <exp_id> in experiments/oof/. Vogliamo capire dove il modello sbaglia, non solo quanto.
+COMPITO: (1) calcola hit-rate per task_index del target, per fascia di seq_len e per ATCO; (2) estrai 30 snapshot in cui il
+target NON è nel top-3, campionati su ≥10 ATCO diversi; per ciascuno mostra tipo del target, sua posizione, i 3 task predetti
+e le feature più discriminanti; (3) separa gli errori in "ambiguità reale" (due task quasi equivalenti: stesso aereo, età simile)
+vs "feature mancante" vs "bug"; (4) per ogni pattern ricorrente proponi una feature o un post-processing e stima
+(sui soli OOF, senza riaddestrare) il guadagno massimo possibile.
+VINCOLI: non modificare codice o dati; non basarti su singoli aneddoti: ogni pattern deve riguardare ≥50 snapshot o essere scartato.
+OUTPUT ATTESO: elenco di max 5 pattern ordinati per snapshot recuperabili, con evidenza numerica e proposta concreta; indica
+quanta parte dell'errore ritieni irriducibile (rumore inter-rater).
+```
+
+### P7 — Nuovo modello di ranking (M4) · 🟡 MEDIUM · Sonnet 5.5
+```
+CONTESTO: M4. Esiste src/models/lgbm_rank.py con interfaccia fit/predict e stessi fold di cv.py. Feature set <vN>.
+COMPITO: aggiungi src/models/<cat_rank|xgb_rank>.py con la stessa interfaccia:
+CatBoost loss QuerySoftMax (poi YetiRank), group_id = sample_id, task_index come categorico, thread_count=8;
+oppure XGBoost rank:ndcg. Early stopping per fold, seed fisso.
+VINCOLI: stessi fold e stesso feature set di LightGBM per confronto equo; tuning solo di 2–3 iperparametri; limita il
+tempo (budget massimo per fold: <minuti>) e riduci iterations se supera.
+OUTPUT ATTESO: CV media±std e per ATCO, correlazione tra OOF del nuovo modello e di LightGBM, tempo per fold.
+GATE: CV comparabile al miglior GBDT (±0.01) e OOF salvati; correlazione < 0.95 è un buon segno per l'ensemble.
+```
+
+### P8 — Pesi per episodio (M5) · 🟠 HARD · Opus 5.5
+```
+CONTESTO: M5. ~15k sample derivano da ~4150 episodi di lavoro (task di 5–40 s) campionati ogni 3 s: i task lunghi dominano la loss.
+COMPITO: (1) ricostruisci gli episodi: snapshot consecutivi della stessa session in cui il target ha lo stesso task_name;
+verifica che il numero di episodi sia vicino a ~4150 e che le lunghezze stiano in 5–40 s (≈2–13 snapshot);
+(2) calcola peso riga = 1/len^alpha con alpha ∈ {0, 0.5, 1} e applicalo ai soli sample del gruppo (non alle righe negative separatamente);
+(3) confronta la CV.
+VINCOLI: gli episodi sono usati SOLO per i pesi di training, mai come feature; la valutazione resta non pesata (la metrica ufficiale
+pesa ogni sample ugualmente); le righe di uno stesso episodio devono restare nello stesso fold (lo sono già, perché il fold è per atco).
+OUTPUT ATTESO: statistiche degli episodi ricostruiti, CV per alpha (media±std, mediana per ATCO), raccomandazione.
+GATE: adottare solo se migliora media E mediana per ATCO; altrimenti scartare e annotare.
+```
+
+### P9 — Ensemble e post-processing (M6) · 🟠 HARD · Opus 5.5
+```
+CONTESTO: M6. Abbiamo OOF di ≥2 modelli (stessi fold) in experiments/oof/.
+COMPITO: src/ensemble.py: (1) normalizza gli score di ogni modello con softmax intra-snapshot (temperatura stimata sugli OOF)
+e in alternativa con rank-normalization; (2) cerca i pesi con griglia semplice o scipy.optimize su CV annidata
+(pesi stimati su 4 fold e valutati sul 5°, a rotazione) per evitare ottimismo; (3) testa il post-processing "diversificazione top-3"
+(se i primi due sono sullo stesso aereo, prova a spostare un task di un altro aereo in 3ª posizione) SOLO sugli OOF.
+VINCOLI: nessun uso della public LB; ogni scelta deve avere guadagno ≥ 1 deviazione standard tra ATCO o essere scartata.
+OUTPUT ATTESO: CV ensemble vs miglior singolo, pesi scelti, effetto del post-processing, versione "semplice" (media uguale) come riserva.
+GATE: ensemble > miglior singolo in CV nested; salva i pesi in experiments/ensemble_<id>.json.
+```
+
+### P10 — DeepSets CPU (M7) · 🔴 VERY HARD · Fable 5.1
+```
+CONTESTO: M7, SOLO se M6 è chiuso e restano ≥4 ore. PyTorch CPU (installa torch cpu), 8 core, feature set <vN> (dalle feature
+di snapshot già calcolate, quindi il modello non deve riscoprirle).
+COMPITO: implementa src/models/deepsets.py: input = tensore [n_snapshot, 59, n_feat] con maschera di padding; NaN → 0 + canale
+maschera per colonna; normalizzazione per feature stimata solo sul training del fold; blocchi di self-attention senza positional
+encoding (d_model=64, 2 blocchi, 4 teste) o DeepSets (phi → media/max pooling → rho concatenato per riga); loss = cross-entropy
+softmax sull'intero snapshot (logit mascherati); AdamW, early stopping per fold, seed fissi, torch.set_num_threads(8).
+VINCOLI: tempo massimo per fold <minuti>; se un fold supera il budget riduci epoche/dimensioni; deve produrre OOF compatibili con
+ensemble.py; verifica con un test di permutation-equivariance (permutando le righe di uno snapshot, i logit si permutano uguali).
+OUTPUT ATTESO: CV media±std, tempo per fold, contributo marginale all'ensemble (CV con e senza), curva di training.
+GATE: contributo positivo all'ensemble in CV nested; altrimenti scarta e annota. Non ritardare M8 per questo.
+```
+
+### P11 — Submission e validazione formato (M8) · 🟡 MEDIUM · Sonnet 5.5
+```
+CONTESTO: M8. Modelli e pesi scelti in <exp_id/ensemble_id>. Le iterazioni finali = media delle best_iteration dei fold.
+COMPITO: riaddestra su train+validation, predici test.csv, scrivi experiments/sub/<nome>.csv con
+src/make_submission.py (colonne sample_id,prediction; 3 row_index distinti separati da spazio, migliore per primo).
+Il check deve fallire se: sample_id ≠ 1863 unici o mancanti, una riga ha <3 id distinti, un id non appartiene a quello snapshot,
+ci sono NaN negli score.
+Sanity aggiuntiva: stessa pipeline addestrata SOLO su train → scorer.py --labelled validation.csv.
+VINCOLI: nessuna modifica ai modelli; salva anche gli score grezzi per eventuali blend successivi.
+OUTPUT ATTESO: percorso del file, risultato del check, score di sanity, submission rimaste oggi (max 5/giorno, reset 02:00 Zagabria).
+```
+
+### P12 — Audit di leakage / CV anomala · 🔴 VERY HARD · Fable 5.1
+```
+CONTESTO: usare quando la CV è troppo bella (> ~0.8) o molto diversa dalla public LB, o un'ultima modifica ha un salto sospetto.
+COMPITO: audit completo di <exp_id>: (1) verifica che nessuna feature derivi da target_index, direttamente o via groupby/transform/rank
+che includa la riga target; (2) verifica che i fold siano per atco e che nessuna sessione compaia in più fold; (3) verifica che feature
+globali (normalizzazioni, encoding, target encoding) siano calcolate dentro il fold; (4) prova sperimentale: rimescola target_index
+dentro ogni snapshot e verifica che la CV crolli al livello del caso (≈ 3/seq_len medio); (5) elimina le feature a più alta importanza
+una alla volta e osserva il calo; (6) confronta la distribuzione degli score OOF per ATCO.
+VINCOLI: non correggere nulla finché non hai individuato la causa con una prova; riporta le prove, non solo le conclusioni.
+OUTPUT ATTESO: verdetto (leakage sì/no), causa precisa con riga di codice, correzione proposta, CV dopo la correzione.
+```
+
+### P13 — Aggiornamento log esperimenti · 🟢 EASY · Haiku 5.5
+```
+CONTESTO: esperimento <exp_id> appena concluso.
+COMPITO: aggiungi una riga a experiments/EXPERIMENTS.md nel formato: id | data/ora | milestone | idea | feature set | modello |
+CV media±std | min–max per ATCO | note/decisione. Incolla il comando esatto usato.
+VINCOLI: non modificare le righe precedenti; non inventare numeri: se un dato manca scrivi "n/d".
+OUTPUT ATTESO: la riga aggiunta.
 ```
 
 ## 5. Controlli che l'agente deve fare sempre (anti-errore)
