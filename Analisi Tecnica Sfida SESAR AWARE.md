@@ -198,147 +198,148 @@ A queste metriche di posizione relativa si affiancano gli **indicatori di carico
 Per massimizzare il volume di dati di addestramento (unendo train.csv con 11.923 sample e validation.csv con 1.252 sample per un totale di **37 sessioni e 13.175 sample**, come consentito dalle regole) senza subire alcun leakage temporale a 3 secondi né *overfitting* su ATCO 020, lo schema di validazione deve utilizzare un **GroupKFold a 5 fold raggruppato per controller\_id (o session\_id)**1. Inoltre, per tenere conto del fatto che i **15.038 sample** derivano da **\~4.150 episodi** di durata variabile (5–40 s), assegnare a ciascuna riga di training un peso inversamente proporzionale o sub-lineare (![][image54]) rispetto alla lunghezza dell'episodio evita che singoli task lunghi 40 secondi (\~13 snapshot consecutivi) dominino la funzione di loss rispetto ai task rapidi di 5–6 secondi1.  
 Il seguente blocco di codice definisce l'architettura di riferimento per la pipeline di feature engineering contestuale, validazione GroupKFold, addestramento LambdaRank con normalizzazione Softmax intra-snapshot e generazione verificata di submission.csv:
 
-Python  
+```python
 import numpy as np  
 import pandas as pd  
 import lightgbm as lgb  
-from sklearn.model\_selection import GroupKFold
+from sklearn.model_selection import GroupKFold
 
-def compute\_aware\_top3\_hit\_rate(df\_eval: pd.DataFrame, score\_col: str \= "pred\_score") \-\> float:  
+def compute_aware_top3_hit_rate(df_eval: pd.DataFrame, score_col: str = "pred_score") -> float:  
     """  
     Implementazione esatta della metrica ufficiale Top-3 Hit Rate.  
-    Ogni sample\_id ha peso identico; restituisce 1 se la riga con target\_index \== 1  
-    rientra nei primi 3 row\_index ordinati per score decrescente, 0 altrimenti.  
+    Ogni sample_id ha peso identico; restituisce 1 se la riga con target_index == 1  
+    rientra nei primi 3 row_index ordinati per score decrescente, 0 altrimenti.  
     """  
-    top3 \= (  
-        df\_eval.sort\_values(\["sample\_id", score\_col\], ascending=\[True, False\])  
-        .groupby("sample\_id", sort=False)  
+    top3 = (  
+        df_eval.sort_values(["sample_id", score_col], ascending=[True, False])  
+        .groupby("sample_id", sort=False)  
         .head(3)  
     )  
-    hits \= top3.groupby("sample\_id", sort=False)\["target\_index"\].max()  
+    hits = top3.groupby("sample_id", sort=False)["target_index"].max()  
     return float(hits.mean())
 
-def build\_aware\_ranking\_features(df: pd.DataFrame) \-\> pd.DataFrame:  
+def build_aware_ranking_features(df: pd.DataFrame) -> pd.DataFrame:  
     """  
-    Genera feature di scomposizione fisica di time\_to\_sector, feature contestuali  
-    Intra-Snapshot (groupby sample\_id) e feature di disambiguazione Intra-Aircraft.  
+    Genera feature di scomposizione fisica di time_to_sector, feature contestuali  
+    Intra-Snapshot (groupby sample_id) e feature di disambiguazione Intra-Aircraft.  
     Preserva rigorosamente np.nan ('Empty \!= 0').  
     """  
-    out \= df.copy()  
+    out = df.copy()  
       
-    \# 1\. Scomposizione fisica del segno di time\_to\_sector  
-    tts \= out\["time\_to\_sector"\]  
-    out\["abs\_time\_to\_sector"\] \= tts.abs()  
-    out\["is\_inside\_sector"\] \= (tts \< 0).astype(np.float32)  
-    out\["sec\_to\_entry\_boundary"\] \= np.where(tts \>= 0, tts, np.nan)  
-    out\["sec\_to\_exit\_boundary"\] \= np.where(tts \< 0, \-tts, np.nan)  
+    # 1\. Scomposizione fisica del segno di time_to_sector  
+    tts = out["time_to_sector"]  
+    out["abs_time_to_sector"] = tts.abs()  
+    out["is_inside_sector"] = (tts > 0).astype(np.float32)  
+    out["sec_to_entry_boundary"] = np.where(tts >= 0, tts, np.nan)  
+    out["sec_to_exit_boundary"] = np.where(tts > 0, -tts, np.nan)  
       
-    \# 2\. Feature Contestuali Intra-Snapshot (groupby sample\_id)  
-    grp\_s \= out.groupby("sample\_id", sort=False)  
-    out\["snap\_open\_tasks\_count"\] \= grp\_s\["row\_index"\].transform("count")  
+    # 2\. Feature Contestuali Intra-Snapshot (groupby sample_id)  
+    grp_s = out.groupby("sample_id", sort=False)  
+    out["snap_open_tasks_count"] = grp_s["row_index"].transform("count")  
       
-    for col in \["abs\_time\_to\_sector", "sec\_to\_entry\_boundary", "sec\_to\_exit\_boundary"\]:  
-        out\[f"{col}\_snap\_rank"\] \= grp\_s\[col\].rank(ascending=True, method="min")  
-        out\[f"{col}\_snap\_pct\_rank"\] \= out\[f"{col}\_snap\_rank"\] / out\["snap\_open\_tasks\_count"\]  
-        out\[f"{col}\_diff\_snap\_min"\] \= out\[col\] \- grp\_s\[col\].transform("min")  
-        col\_mean \= grp\_s\[col\].transform("mean")  
-        col\_std \= grp\_s\[col\].transform("std").replace(0, np.nan)  
-        out\[f"{col}\_snap\_zscore"\] \= (out\[col\] \- col\_mean) / (col\_std \+ 1e-5)  
+    for col in ["abs_time_to_sector", "sec_to_entry_boundary", "sec_to_exit_boundary"]:  
+        out[f"{col}_snap_rank"] = grp_s[col].rank(ascending=True, method="min")  
+        out[f"{col}_snap_pct_rank"] = out[f"{col}_snap_rank"] / out["snap_open_tasks_count"]  
+        out[f"{col}_diff_snap_min"] = out[col] - grp_s[col].transform("min")  
+        col_mean = grp_s[col].transform("mean")  
+        col_std = grp_s[col].transform("std").replace(0, np.nan)  
+        out[f"{col}_snap_zscore"] = (out[col] - col_mean) / (col_std \+ 1e-5)  
           
-    \# 3\. Disambiguazione Intra-Aircraft (separa assume\_aircraft vs entry\_coordination)  
+    # 3\. Disambiguazione Intra-Aircraft (separa assume_aircraft vs entry_coordination)  
     if "aircraft" in out.columns:  
-        grp\_ac \= out.groupby(\["sample\_id", "aircraft"\], sort=False)  
-        out\["ac\_open\_tasks\_count"\] \= grp\_ac\["row\_index"\].transform("count")  
-        for age\_col in \[c for c in out.columns if "age" in c.lower()\]:  
-            out\[f"{age\_col}\_ac\_diff\_min"\] \= out\[age\_col\] \- grp\_ac\[age\_col\].transform("min")  
-            out\[f"{age\_col}\_ac\_rank"\] \= grp\_ac\[age\_col\].rank(ascending=True, method="min")  
+        grp_ac = out.groupby(["sample_id", "aircraft"], sort=False)  
+        out["ac_open_tasks_count"] = grp_ac["row_index"].transform("count")  
+        for age_col in [c for c in out.columns if "age" in c.lower()]:  
+            out[f"{age_col}_ac_diff_min"] = out[age_col] - grp_ac[age_col].transform("min")  
+            out[f"{age_col}_ac_rank"] = grp_ac[age_col].rank(ascending=True, method="min")  
               
     return out
 
-def run\_aware\_ltr\_training(  
-    train\_df: pd.DataFrame,  
-    val\_df: pd.DataFrame,  
-    test\_df: pd.DataFrame,  
-    feature\_cols: list,  
-    cat\_cols: list,  
-    group\_col: str  
-) \-\> pd.DataFrame:  
+def run_aware_ltr_training(  
+    train_df: pd.DataFrame,  
+    val_df: pd.DataFrame,  
+    test_df: pd.DataFrame,  
+    feature_cols: list,  
+    cat_cols: list,  
+    group_col: str  
+) -> pd.DataFrame:  
     """  
-    Pipeline GroupKFold su train.csv \+ validation.csv con LightGBM LambdaRank  
+    Pipeline GroupKFold su train.csv + validation.csv con LightGBM LambdaRank  
     e calibrazione Softmax intra-snapshot per l'ensemble finale.  
     """  
-    full\_df \= pd.concat(\[train\_df, val\_df\], axis=0, ignore\_index=True)  
-    full\_df \= build\_aware\_ranking\_features(full\_df)  
-    test\_proc \= build\_aware\_ranking\_features(test\_df)  
+    full_df = pd.concat([train_df, val_df], axis=0, ignore_index=True)  
+    full_df = build_aware_ranking_features(full_df)  
+    test_proc = build_aware_ranking_features(test_df)  
       
-    for c in cat\_cols:  
-        full\_df\[c\] \= full\_df\[c\].astype("category")  
-        test\_proc\[c\] \= test\_proc\[c\].astype("category")  
+    for c in cat_cols:  
+        full_df[c] = full_df[c].astype("category")  
+        test_proc[c] = test_proc[c].astype("category")  
           
-    gkf \= GroupKFold(n\_splits=5)  
-    oof\_probs \= np.zeros(len(full\_df), dtype=np.float64)  
-    test\_probs \= np.zeros(len(test\_proc), dtype=np.float64)  
+    gkf = GroupKFold(n_splits=5)  
+    oof_probs = np.zeros(len(full_df), dtype=np.float64)  
+    test_probs = np.zeros(len(test_proc), dtype=np.float64)  
       
-    params \= {  
+    params = {  
         "objective": "lambdarank",  
         "metric": "ndcg",  
-        "ndcg\_eval\_at": \[1, 3\],  
-        "boosting\_type": "gbdt",  
-        "learning\_rate": 0.03,  
-        "num\_leaves": 31,  
-        "max\_depth": 6,  
-        "min\_child\_samples": 50,  
+        "ndcg_eval_at": [1, 3],  
+        "boosting_type": "gbdt",  
+        "learning_rate": 0.03,  
+        "num_leaves": 31,  
+        "max_depth": 6,  
+        "min_child_samples": 50,  
         "subsample": 0.8,  
-        "colsample\_bytree": 0.75,  
-        "reg\_alpha": 2.0,  
-        "reg\_lambda": 5.0,  
-        "random\_state": 42,  
-        "n\_jobs": \-1  
+        "colsample_bytree": 0.75,  
+        "reg_alpha": 2.0,  
+        "reg_lambda": 5.0,  
+        "random_state": 42,  
+        "n_jobs": -1  
     }  
       
-    for fold, (trn\_idx, val\_idx) in enumerate(gkf.split(full\_df, full\_df\["target\_index"\], full\_df\[group\_col\])):  
-        trn\_fold \= full\_df.iloc\[trn\_idx\].sort\_values("sample\_id")  
-        val\_fold \= full\_df.iloc\[val\_idx\].sort\_values("sample\_id")  
+    for fold, (trn_idx, val_idx) in enumerate(gkf.split(full_df, full_df["target_index"], full_df[group_col])):  
+        trn_fold = full_df.iloc[trn_idx].sort_values("sample_id")  
+        val_fold = full_df.iloc[val_idx].sort_values("sample_id")  
           
-        trn\_q \= trn\_fold.groupby("sample\_id", sort=False).size().to\_numpy()  
-        val\_q \= val\_fold.groupby("sample\_id", sort=False).size().to\_numpy()  
+        trn_q = trn_fold.groupby("sample_id", sort=False).size().to_numpy()  
+        val_q = val_fold.groupby("sample_id", sort=False).size().to_numpy()  
           
-        dtrain \= lgb.Dataset(trn\_fold\[feature\_cols\], label=trn\_fold\["target\_index"\], group=trn\_q, categorical\_feature=cat\_cols)  
-        dval \= lgb.Dataset(val\_fold\[feature\_cols\], label=val\_fold\["target\_index"\], group=val\_q, categorical\_feature=cat\_cols, reference=dtrain)  
+        dtrain = lgb.Dataset(trn_fold[feature_cols], label=trn_fold["target_index"], group=trn_q, categorical_feature=cat_cols)  
+        dval = lgb.Dataset(val_fold[feature_cols], label=val_fold["target_index"], group=val_q, categorical_feature=cat_cols, reference=dtrain)  
           
-        model \= lgb.train(  
+        model = lgb.train(  
             params,  
             dtrain,  
-            num\_boost\_round=1500,  
-            valid\_sets=\[dval\],  
-            callbacks=\[lgb.early\_stopping(stopping\_rounds=80, verbose=False)\]  
+            num_boost_round=1500,  
+            valid_sets=[dval],  
+            callbacks=[lgb.early_stopping(stopping_rounds=80, verbose=False)]  
         )  
           
-        val\_logits \= model.predict(val\_fold\[feature\_cols\], num\_iteration=model.best\_iteration)  
-        val\_tmp \= pd.DataFrame({"sample\_id": val\_fold\["sample\_id"\].values, "logit": val\_logits}, index=val\_fold.index)  
-        oof\_probs\[val\_fold.index\] \= val\_tmp.groupby("sample\_id")\["logit"\].transform(  
-            lambda x: np.exp(x \- x.max()) / np.exp(x \- x.max()).sum()  
+        val_logits = model.predict(val_fold[feature_cols], num_iteration=model.best_iteration)  
+        val_tmp = pd.DataFrame({"sample_id": val_fold["sample_id"].values, "logit": val_logits}, index=val_fold.index)  
+        oof_probs[val_fold.index] = val_tmp.groupby("sample_id")["logit"].transform(  
+            lambda x: np.exp(x - x.max()) / np.exp(x - x.max()).sum()  
         )  
           
-        tst\_logits \= model.predict(test\_proc\[feature\_cols\], num\_iteration=model.best\_iteration)  
-        tst\_tmp \= pd.DataFrame({"sample\_id": test\_proc\["sample\_id"\].values, "logit": tst\_logits})  
-        test\_probs \+= tst\_tmp.groupby("sample\_id")\["logit"\].transform(  
-            lambda x: np.exp(x \- x.max()) / np.exp(x \- x.max()).sum()  
-        ).to\_numpy() / gkf.n\_splits  
+        tst_logits = model.predict(test_proc[feature_cols], num_iteration=model.best_iteration)  
+        tst_tmp = pd.DataFrame({"sample_id": test_proc["sample_id"].values, "logit": tst_logits})  
+        test_probs \+= tst_tmp.groupby("sample_id")["logit"].transform(  
+            lambda x: np.exp(x - x.max()) / np.exp(x - x.max()).sum()  
+        ).to_numpy() / gkf.n_splits  
           
-    full\_df\["pred\_score"\] \= oof\_probs  
-    print(f"OOF GroupKFold Top-3 Hit Rate: {compute\_aware\_top3\_hit\_rate(full\_df, 'pred\_score'):.5f}")  
+    full_df["pred_score"] = oof_probs  
+    print(f"OOF GroupKFold Top-3 Hit Rate: {compute_aware_top3_hit_rate(full_df, 'pred_score'):.5f}")  
       
-    test\_proc\["score"\] \= test\_probs  
-    top3\_sub \= (  
-        test\_proc.sort\_values(\["sample\_id", "score"\], ascending=\[True, False\])  
-        .groupby("sample\_id", sort=False)\["row\_index"\]  
-        .apply(lambda r: " ".join(map(str, r.iloc\[:3\])))  
+    test_proc["score"] = test_probs  
+    top3_sub = (  
+        test_proc.sort_values(["sample_id", "score"], ascending=[True, False])  
+        .groupby("sample_id", sort=False)["row_index"]  
+        .apply(lambda r: " ".join(map(str, r.iloc[:3])))  
         .rename("prediction")  
-        .reset\_index()  
+        .reset_index()  
     )  
-    top3\_sub.to\_csv("submission.csv", index=False)  
-    return top3\_sub
+    top3_sub.to_csv("submission.csv", index=False)  
+    return top3_sub
+```
 
 ### **Integrazione di LLM e Architetture Deep Learning (Set-Transformer / DeepSets)**
 
