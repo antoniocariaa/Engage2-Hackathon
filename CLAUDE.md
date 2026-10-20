@@ -24,11 +24,15 @@ Piano: `PIANO_TECNICO.md`. Workflow agentico: `GUIDA_AGENTICA.md`. Log esperimen
 - Non usare come feature: `sample_id, row_index, target_index, session, atco, scenario, timestamp, task_name` grezzi.
 - Il codice nel file `Analisi Tecnica…md` è illustrativo: verificare sempre sui dati prima di copiarlo.
 
-## Comandi (da creare durante M0–M2)
-- Setup: `python -m venv .venv && .venv/bin/pip install -r requirements.txt`
-- CV: `python -m src.cv --model lgbm_rank --features <vN>`
-- Sanity metrica: `python scorer.py --labelled validation.csv <submission.csv>`
-- Submission: `python -m src.make_submission --models <...> --out experiments/sub/<nome>.csv`
+## Comandi
+- Setup: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`
+- Parquet (i CSV vanno messi in `data/`): `.venv/bin/python -m src.data --convert`
+- Test: `.venv/bin/python -m pytest -q tests`
+- Baseline + confronto con scorer: `.venv/bin/python -m src.baseline`
+- CV (salva OOF e aggiunge la riga in EXPERIMENTS.md): `.venv/bin/python -m src.cv --features <vN> --exp-id <id> --note "<idea>"`
+- Sanity metrica: `.venv/bin/python scorer.py --labelled data/validation.csv <submission.csv>`
+- Submission (M8, da creare): `python -m src.make_submission --models <...> --out experiments/sub/<nome>.csv`
+- Baseline |time_to_sector|: 0.307 su validation (0.35 è il valore sul test).
 
 ## Stile di lavoro
 - Lavora una milestone alla volta; alla fine di ognuna riporta ≤10 righe con numeri e aspetta l'ok sul gate.

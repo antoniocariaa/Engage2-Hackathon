@@ -1,6 +1,21 @@
 # Registro Esperimenti — AWARE Task-Prioritisation
 
+> ⚠️ Le righe marcate ⚠️ usano il primo harness, con early stopping sul fold di valutazione: score ottimisti di circa +0.01 e non confrontabili. Dal run `curve-v0` in poi la CV usa un numero fisso di round (default 300); "curva media max" è solo diagnostica.
+
 | id | data/ora | milestone | idea | feature set | modello | CV mean ± std | min–max per ATCO | note / decisione |
 |---|---|---|---|---|---|---|---|---|
 | M0-setup | 2026-10-20 17:38 | M0 | Setup ambiente e parquet | raw | n/a | n/a | n/a | Setup completato e gate superato (load < 0.3s) |
-
+| m2-v0 ⚠️ | 2026-10-20 17:51 | M2 | LGBM lambdarank feature grezze | v0 (87) | lgbm_rank | 0.6630 (ATCO 0.6734 ± 0.0484) | 0.583–0.754 | iter 199, 1.8 min · `python -m src.cv --model lgbm_rank --features v0 --exp-id m2-v0` |
+| m3-v1 ⚠️ | 2026-10-20 17:54 | M3 | scomposizione time_to_sector | v1 (92) | lgbm_rank | 0.6634 (ATCO 0.6725 ± 0.0543) | 0.583–0.767 | iter 248, 2.5 min · `python -m src.cv --model lgbm_rank --features v1 --exp-id m3-v1` |
+| m3-v2 ⚠️ | 2026-10-20 17:57 | M3 | contesto di snapshot | v2 (130) | lgbm_rank | 0.6572 (ATCO 0.6663 ± 0.0447) | 0.598–0.738 | iter 248, 3.6 min · `python -m src.cv --model lgbm_rank --features v2 --exp-id m3-v2` |
+| m3-v3 ⚠️ | 2026-10-20 18:00 | M3 | carico dello snapshot | v3 (137) | lgbm_rank | 0.6593 (ATCO 0.6682 ± 0.0445) | 0.589–0.734 | iter 210, 2.5 min · `python -m src.cv --model lgbm_rank --features v3 --exp-id m3-v3` |
+| curve-v0 | 2026-10-20 18:07 | M2 | curva round (protocollo a round fissi) | v0 (87) | lgbm_rank | 0.6491 (ATCO 0.6600 ± 0.0544) | 0.564–0.752 | 600 round (curva media max 0.6587 @ 305), 3.5 min · `python -m src.cv --model lgbm_rank --features v0 --rounds 600 --exp-id curve-v0` |
+| abl-v0 | 2026-10-20 18:09 | M3 | ablation round fissi: v0 | v0 (87) | lgbm_rank | 0.6569 (ATCO 0.6680 ± 0.0496) | 0.583–0.754 | 300 round (curva media max 0.6585 @ 168), 2.1 min · `python -m src.cv --model lgbm_rank --features v0 --rounds 300 --exp-id abl-v0` |
+| abl-tts | 2026-10-20 18:11 | M3 | ablation round fissi: tts | tts (92) | lgbm_rank | 0.6536 (ATCO 0.6634 ± 0.0504) | 0.578–0.754 | 300 round (curva media max 0.6568 @ 167), 1.7 min · `python -m src.cv --model lgbm_rank --features tts --rounds 300 --exp-id abl-tts` |
+| abl-snap | 2026-10-20 18:13 | M3 | ablation round fissi: snap | snap (130) | lgbm_rank | 0.6495 (ATCO 0.6589 ± 0.0441) | 0.579–0.719 | 300 round (curva media max 0.6532 @ 253), 2.3 min · `python -m src.cv --model lgbm_rank --features snap --rounds 300 --exp-id abl-snap` |
+| abl-load | 2026-10-20 18:15 | M3 | ablation round fissi: load | load (99) | lgbm_rank | 0.6498 (ATCO 0.6598 ± 0.0516) | 0.577–0.739 | 300 round (curva media max 0.6526 @ 268), 1.9 min · `python -m src.cv --model lgbm_rank --features load --rounds 300 --exp-id abl-load` |
+| abl-ac | 2026-10-20 18:17 | M3 | ablation round fissi: ac | ac (107) | lgbm_rank | 0.6586 (ATCO 0.6693 ± 0.0462) | 0.596–0.754 | 300 round (curva media max 0.6624 @ 269), 1.8 min · `python -m src.cv --model lgbm_rank --features ac --rounds 300 --exp-id abl-ac` |
+| abl-hist | 2026-10-20 18:20 | M3 | ablation round fissi: hist | hist (95) | lgbm_rank | 0.6523 (ATCO 0.6617 ± 0.0479) | 0.582–0.736 | 300 round (curva media max 0.6567 @ 228), 2.3 min · `python -m src.cv --model lgbm_rank --features hist --rounds 300 --exp-id abl-hist` |
+| abl-v5 | 2026-10-20 18:22 | M3 | ablation round fissi: v5 | v5 (165) | lgbm_rank | 0.6496 (ATCO 0.6554 ± 0.0415) | 0.589–0.727 | 300 round (curva media max 0.6528 @ 173), 2.6 min · `python -m src.cv --model lgbm_rank --features v5 --rounds 300 --exp-id abl-v5` |
+| m4-xendcg-ac | 2026-10-20 18:24 | M4 | LGBM rank_xendcg | ac (107) | lgbm_xendcg | 0.6440 (ATCO 0.6521 ± 0.0444) | 0.571–0.717 | alpha 0.0, 300 round (curva media max 0.6481 @ 232), 0.9 min · `python -m src.cv --model lgbm_xendcg --features ac --rounds 300 --alpha 0.0 --exp-id m4-xendcg-ac` |
+| m5-w05-ac | 2026-10-20 18:25 | M5 | pesi episodio alpha=0.5 | ac (107) | lgbm_rank | 0.6519 (ATCO 0.6620 ± 0.0484) | 0.567–0.739 | alpha 0.5, 300 round (curva media max 0.6566 @ 243), 1.0 min · `python -m src.cv --model lgbm_rank --features ac --rounds 300 --alpha 0.5 --exp-id m5-w05-ac` |
