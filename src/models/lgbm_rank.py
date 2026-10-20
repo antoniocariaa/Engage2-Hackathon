@@ -3,7 +3,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
-from src.config import RANDOM_SEED
+from src.config import N_THREADS, RANDOM_SEED
 from src.features import CAT_FEATURES
 
 PARAMS = {
@@ -17,7 +17,7 @@ PARAMS = {
     "bagging_fraction": 0.8,
     "bagging_freq": 1,
     "lambda_l2": 1.0,
-    "num_threads": 8,
+    "num_threads": N_THREADS,
     "seed": RANDOM_SEED,
     "verbose": -1,
 }

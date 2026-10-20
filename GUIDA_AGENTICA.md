@@ -67,6 +67,7 @@ Regole d'uso:
 | P11 Submission e validazione formato | M8 | 🟡 MEDIUM | Sonnet 5.5 |
 | P12 Audit leakage / CV anomala | qualsiasi | 🔴 VERY HARD | Fable 5.1 |
 | P13 Aggiornamento log esperimenti | qualsiasi | 🟢 EASY | Haiku 5.5 |
+| P14 Eseguire un esperimento su un altro PC | qualsiasi | 🟢 EASY | Haiku 5.5 / Sonnet 5.5 |
 
 ---
 
@@ -238,6 +239,23 @@ COMPITO: aggiungi una riga a experiments/EXPERIMENTS.md nel formato: id | data/o
 CV media±std | min–max per ATCO | note/decisione. Incolla il comando esatto usato.
 VINCOLI: non modificare le righe precedenti; non inventare numeri: se un dato manca scrivi "n/d".
 OUTPUT ATTESO: la riga aggiunta.
+```
+
+### P14 — Eseguire un esperimento su un altro PC · 🟢 EASY · Haiku 5.5 / Sonnet 5.5
+```
+CONTESTO: repo AWARE (branch <branch>), su un PC diverso da quello di sviluppo. I CSV della competizione
+(train.csv, validation.csv, test.csv, sample_submission.csv) sono in <percorso>.
+COMPITO:
+1. git clone <url-repo> && cd Engage2-Hackathon && git checkout <branch>
+2. copia i 4 CSV in data/
+3. rileva l'hardware: numero di core (nproc / os.cpu_count) e se c'è una GPU NVIDIA funzionante (nvidia-smi)
+4. esegui: AWARE_THREADS=<core> ./run.sh <modello> <feature_set> <exp_id>
+   (es. ./run.sh cat_rank ac m4-cat-ac). Se c'è una GPU NVIDIA e il modello è cat_rank, prova prima con AWARE_GPU=1;
+   se CatBoost dà errore sulla GPU (loss non supportata, driver), rilancia senza AWARE_GPU.
+   Su Windows senza bash: usa WSL o Git Bash; in alternativa esegui a mano i comandi di run.sh con .venv\Scripts\python.
+VINCOLI: non modificare il codice né i parametri; non fare commit o push; se i test falliscono fermati e riporta l'errore.
+OUTPUT ATTESO: hardware usato, tempo totale, riga "CV hit3 = ..." e score per ATCO; poi copia sul PC di sviluppo
+experiments/oof/<exp_id>.parquet, experiments/oof/<exp_id>.json e l'ultima riga di experiments/EXPERIMENTS.md.
 ```
 
 ## 5. Controlli che l'agente deve fare sempre (anti-errore)

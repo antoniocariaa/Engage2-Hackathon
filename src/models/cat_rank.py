@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from catboost import CatBoostRanker, Pool
 
-from src.config import RANDOM_SEED
+from src.config import N_THREADS, RANDOM_SEED, USE_GPU
 from src.features import CAT_FEATURES
 from src.models.lgbm_rank import group_sizes
 
@@ -13,10 +13,12 @@ PARAMS = {
     "learning_rate": 0.08,
     "depth": 6,
     "l2_leaf_reg": 3.0,
-    "thread_count": 8,
+    "thread_count": N_THREADS,
     "random_seed": RANDOM_SEED,
     "verbose": 0,
 }
+if USE_GPU:
+    PARAMS["task_type"] = "GPU"
 
 
 def _pool(X, y, sid, weight=None):

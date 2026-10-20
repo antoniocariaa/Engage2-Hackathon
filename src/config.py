@@ -25,6 +25,11 @@ TASK_NAME_COL = "task_name"
 
 RANDOM_SEED = 42
 
+# Hardware: di default tutti i core; sovrascrivibile con AWARE_THREADS. AWARE_GPU=1 prova CatBoost su GPU.
+import os
+N_THREADS = int(os.environ.get("AWARE_THREADS", os.cpu_count() or 4))
+USE_GPU = os.environ.get("AWARE_GPU", "0") == "1"
+
 # Columns prohibited from features
 DROP_COLS = [
     "sample_id",
